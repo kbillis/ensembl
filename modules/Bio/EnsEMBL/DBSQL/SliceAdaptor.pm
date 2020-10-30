@@ -114,7 +114,7 @@ use Bio::EnsEMBL::Utils::Exception qw(throw warning);
 use Bio::EnsEMBL::ProjectionSegment;
 use Scalar::Util qw/looks_like_number/;
 use Bio::EnsEMBL::Utils::Scalar qw/assert_integer/;
-
+use Data::Dumper;
 @ISA = ('Bio::EnsEMBL::DBSQL::BaseAdaptor');
 
 sub new {
@@ -302,6 +302,7 @@ sub fetch_by_region {
         print "Running synonym-match method...\n";
         $slice = $self->_fetch_by_seq_region_synonym( $cs, $seq_region_name, $start, $end, $strand, $version, $no_fuzz );
       }
+      print Dumper( $slice );
 
       # check whether any slice data has been returned
       if ( $slice && $slice->seq_region_name ) {
@@ -317,89 +318,90 @@ sub fetch_by_region {
           print "Defining \$arr\n";
           my $tmp_key_string = "$seq_region_name:" . $slice->coord_system()->dbID();
           $arr = $self->{'sr_name_cache'}->{$tmp_key_string};
+          print Dumper( $arr );
           $length = $arr->[3];
         }
 
-      }
+      } else { # if no slice object with a match returned, try using a fuzzy match
 
-      if ($no_fuzz) { return; }
+        if ($no_fuzz) { return; }
 
-      # Do fuzzy matching, assuming that we are just missing a version
-      # on the end of the seq_region name.
+        # Do fuzzy matching, assuming that we are just missing a version
+        # on the end of the seq_region name.
 
-      $sth =
-        $self->prepare( $sql . " WHERE sr.name LIKE ? " . $constraint );
+        $sth =
+          $self->prepare( $sql . " WHERE sr.name LIKE ? " . $constraint );
 
-      $bind_params[0] =
-        [ sprintf( '%s.%%', $seq_region_name ), SQL_VARCHAR ];
+        $bind_params[0] =
+          [ sprintf( '%s.%%', $seq_region_name ), SQL_VARCHAR ];
 
-      $pos = 0;
-      foreach my $param (@bind_params) {
-        $sth->bind_param( ++$pos, $param->[0], $param->[1] );
-      }
-
-      $sth->execute();
-
-      my $prefix_len = length($seq_region_name) + 1;
-      my $high_ver   = undef;
-      my $high_cs    = $cs;
-
-      # Find the fuzzy-matched seq_region with the highest postfix
-      # (which ought to be a version).
-
-      my ( $tmp_name, $id, $tmp_length, $cs_id );
-      $sth->bind_columns( \( $tmp_name, $id, $tmp_length, $cs_id ) );
-
-      my $i = 0;
-
-      while ( $sth->fetch ) {
-        my $tmp_cs =
-          ( defined($cs) ? $cs : $csa->fetch_by_dbID($cs_id) );
-
-        # cache values for future reference
-        my $arr = [ $id, $tmp_name, $cs_id, $tmp_length ];
-        $self->{'sr_name_cache'}->{"$tmp_name:$cs_id"} = $arr;
-        $self->{'sr_id_cache'}->{"$id"}                = $arr;
-
-        my $tmp_ver = substr( $tmp_name, $prefix_len );
-
-        # skip versions which are non-numeric and apparently not
-        # versions
-        if ( $tmp_ver !~ /^\d+$/ ) { next }
-
-        # take version with highest num, if two versions match take one
-        # with highest ranked coord system (lowest num)
-        if ( !defined($high_ver)
-          || $tmp_ver > $high_ver
-          || ( $tmp_ver == $high_ver && $tmp_cs->rank < $high_cs->rank )
-          )
-        {
-          $seq_region_name = $tmp_name;
-          $length          = $tmp_length;
-          $high_ver        = $tmp_ver;
-          $high_cs         = $tmp_cs;
+        $pos = 0;
+        foreach my $param (@bind_params) {
+          $sth->bind_param( ++$pos, $param->[0], $param->[1] );
         }
 
-        $i++;
-      } ## end while ( $sth->fetch )
-      $sth->finish();
+        $sth->execute();
 
-      # warn if fuzzy matching found more than one result
-      if ( $i > 1 ) {
-        warning(
-          sprintf(
-            "Fuzzy matching of seq_region_name "
-              . "returned more than one result.\n"
-              . "You might want to check whether the returned seq_region\n"
-              . "(%s:%s) is the one you intended to fetch.\n",
-            $high_cs->name(), $seq_region_name ) );
+        my $prefix_len = length($seq_region_name) + 1;
+        my $high_ver   = undef;
+        my $high_cs    = $cs;
+
+        # Find the fuzzy-matched seq_region with the highest postfix
+        # (which ought to be a version).
+
+        my ( $tmp_name, $id, $tmp_length, $cs_id );
+        $sth->bind_columns( \( $tmp_name, $id, $tmp_length, $cs_id ) );
+
+        my $i = 0;
+
+        while ( $sth->fetch ) {
+          my $tmp_cs =
+            ( defined($cs) ? $cs : $csa->fetch_by_dbID($cs_id) );
+
+          # cache values for future reference
+          my $arr = [ $id, $tmp_name, $cs_id, $tmp_length ];
+          $self->{'sr_name_cache'}->{"$tmp_name:$cs_id"} = $arr;
+          $self->{'sr_id_cache'}->{"$id"}                = $arr;
+
+          my $tmp_ver = substr( $tmp_name, $prefix_len );
+
+          # skip versions which are non-numeric and apparently not
+          # versions
+          if ( $tmp_ver !~ /^\d+$/ ) { next }
+
+          # take version with highest num, if two versions match take one
+          # with highest ranked coord system (lowest num)
+          if ( !defined($high_ver)
+            || $tmp_ver > $high_ver
+            || ( $tmp_ver == $high_ver && $tmp_cs->rank < $high_cs->rank )
+            )
+          {
+            $seq_region_name = $tmp_name;
+            $length          = $tmp_length;
+            $high_ver        = $tmp_ver;
+            $high_cs         = $tmp_cs;
+          }
+
+          $i++;
+        } ## end while ( $sth->fetch )
+        $sth->finish();
+
+        # warn if fuzzy matching found more than one result
+        if ( $i > 1 ) {
+          warning(
+            sprintf(
+              "Fuzzy matching of seq_region_name "
+                . "returned more than one result.\n"
+                . "You might want to check whether the returned seq_region\n"
+                . "(%s:%s) is the one you intended to fetch.\n",
+              $high_cs->name(), $seq_region_name ) );
+        }
+
+        $cs = $high_cs;
+
+        # return if we did not find any appropriate match:
+        if ( !defined($high_ver) ) { return; }
       }
-
-      $cs = $high_cs;
-
-      # return if we did not find any appropriate match:
-      if ( !defined($high_ver) ) { return; }
-
     } else {
 
       my ( $id, $cs_id );
