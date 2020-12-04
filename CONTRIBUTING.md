@@ -161,7 +161,7 @@ This can be done using the patching script provided in https://github.com/Ensemb
 
 The Ensembl code comes with a series of unit tests that check methods behave as expected.
 This test suite is run as part of the TravisCi integration for each pull request.
-See https://travis-ci.org/Ensembl/ensembl
+See https://travis-ci.com/Ensembl/ensembl
 This ensures that any change does not affect existing functionality.
 A pull request can only be integrated if the test suite passes successfully.
 If no tests are available for a new functionality, please provide some basic tests.

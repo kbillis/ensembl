@@ -1,9 +1,9 @@
 # Ensembl Core API
 
-[![Build Status](https://travis-ci.org/Ensembl/ensembl.svg?branch=master)][travis]
+[![Build Status](https://travis-ci.com/Ensembl/ensembl.svg?branch=master)][travis]
 [![Coverage Status](https://coveralls.io/repos/github/Ensembl/ensembl/badge.svg?branch=master)][coveralls]
 
-[travis]: https://travis-ci.org/Ensembl/ensembl
+[travis]: https://travis-ci.com/Ensembl/ensembl
 [coveralls]: https://coveralls.io/github/Ensembl/ensembl
 
 The Ensembl Core API (Application Programming Interface) serves as a middle layer between the underlying MySQL database and the user's script. It aims to encapsulate the database layer by providing high level access to the database.
