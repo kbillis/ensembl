@@ -86,6 +86,7 @@ sub run {
   my $transcript_reactome_source_id =  $self->get_source_id_for_source_name("reactome_transcript", undef, $dbi);
   my $gene_reactome_source_id =  $self->get_source_id_for_source_name("reactome_gene", undef, $dbi);
   my $reactome_uniprot_source_id = $self->get_source_id_for_source_name("reactome", "uniprot", $dbi);
+
   if($reactome_source_id < 1 || $transcript_reactome_source_id < 1 || $gene_reactome_source_id < 1){
     die "Could not find source id for reactome sources???\n";
   }
@@ -99,20 +100,34 @@ sub run {
     die "Could not find source id for reactome uniprot???\n";
   }
   else{
-    print "Source_id = $reactome_uniprot_source_id\n";
+    print "Uniprot_source_id = $reactome_uniprot_source_id\n";
   }
 
   my (%uniprot) = %{$self->get_valid_codes("uniprot/",$species_id, $dbi)};
   my $is_uniprot = 0;
+  my $is_plants = 0;
 
+  # for plants: 
+  # the data files are named in this fashion:
+  # Ensembl2PlantReactome.txt, Ensembl2PlantReactomeReactions.txt, UniProt2PlantReactome.txt
+  # The stable ids for plants are not the ENS ids. e.g AT1G12345 for arabidopsis
+  # and the biotype is gene as manually added by Plants team.
+  # this will need to be generalised if other non-vertebrates need to be added
+  # For Uniprot file, current logic of DEPENDENT xref is applicable.
+  # for plants ends here
   foreach my $file (@$files) {
+
+    print ("file is $file \n");
     my $reactome_io = $self->get_filehandle($file);
     if ($file =~ /UniProt/) { $is_uniprot = 1; }
+    if ($file =~ /Plant/) { $is_plants = 1; }
+   
   # Example line:
   # ENSG00000138685 REACT_111045    http://www.reactome.org/PathwayBrowser/#REACT_111045    Developmental Biology   TAS     Homo sapiens
     while (my $line = $reactome_io->getline() ) {
       chomp $line;
       my ($ensembl_stable_id, $reactome_id, $url, $description, $evidence, $species) = split /\t+/,$line;
+      #print ("$ensembl_stable_id --  $reactome_id --  $url --  $description --  $evidence --  $species");
       if ($description!~ /^[A-Za-z0-9_,\(\)\/\-\.:\+'&;"\/\?%>\s\[\]]+$/) { next; }
   
       $species =~ s/\s/_/;
@@ -141,6 +156,13 @@ sub run {
             $info_type = 'DEPENDENT';
           }
         }
+        elsif ($is_plants) {
+          $type = 'gene';
+          $reactome_source_id = $self->get_source_id_for_source_name("Plant_Reactome_Pathway", "direct", $dbi);
+          if ($file =~ /Reactions/) { 
+            $reactome_source_id = $self->get_source_id_for_source_name("Plant_reactome_Reaction", "reactions", $dbi);
+          }
+        }
         elsif ($ensembl_stable_id =~ /G[0-9]*$/) { 
           $type = 'gene';
           $reactome_source_id = $gene_reactome_source_id;
@@ -159,6 +181,7 @@ sub run {
   
   # Add new entry for reactome xref
   # as well as direct xref to ensembl stable id
+   #print ("source id being added : $reactome_source_id \n");
         my $xref_id = $self->add_xref({ acc         => $reactome_id,
                           label       => $reactome_id,
                           desc        => $description,
